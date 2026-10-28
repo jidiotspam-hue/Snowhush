@@ -66,7 +66,8 @@ vertex SpriteOut spriteVertex(uint vid [[vertex_id]],
     out.tint = float4(s.tintRed, s.tintGreen, s.tintBlue, s.tintAmount);
     out.light = u.light.rgb;
     out.lump = s.lump;
-    out.spin = s.lump > 0.0 ? u.time * (s.lump - 0.5) * 9.0 + s.lump * 40.0 : u.time * 0.8 + float(vid) * 1.047;
+    float seed = fract(sin(float(vid) * 12.9898) * 43758.5453);
+    out.spin = s.lump > 0.0 ? u.time * (s.lump - 0.5) * 9.0 + s.lump * 40.0 : u.time * (0.4 + seed * 0.8) + seed * 6.2831853;
     return out;
 }
 
@@ -92,10 +93,8 @@ fragment float4 spriteFragment(SpriteOut in [[stage_in]], float2 coord [[point_c
     float head = span > 0.0 ? 0.15 + 0.85 * pow(t * 0.5 + 0.5, 1.5) : 1.0;
     float a = (1.0 - smoothstep(mix(0.6, 0.0, in.soft), 1.0, r)) * in.alpha * head;
     if (a < 0.002) discard_fragment();
-    float3 core = float3(0.975, 0.985, 1.0);
-    float3 rim = float3(0.65, 0.72, 0.84);
-    float prism = saturate((r - 0.7) * 2.5) * 0.12;
-    rim += float3(prism * 0.4, prism * 0.1, -prism * 0.3);
+    float3 core = float3(0.965, 0.975, 0.995);
+    float3 rim = float3(0.62, 0.67, 0.77);
     float3 color = mix(core, rim, saturate(smoothstep(0.35, 1.0, r) * 0.65 + shading));
     color = mix(color, in.tint.rgb, in.tint.a) * in.light;
     return float4(color * a, a);
@@ -159,10 +158,9 @@ fragment float4 pileFragment(PileOut in [[stage_in]],
     color += (hash(floor(in.position.xy)) - 0.5) * 0.02;
 
     float seed = hash(floor(in.position.xy * 0.5) + 31.7);
-    if (seed > 0.988) {
-        float twinkle = pow(saturate(sin(u.time * (0.8 + seed * 2.2) + seed * 90.0)), 24.0);
-        float3 glintColor = mix(float3(1.0), float3(0.9, 0.95, 1.0), hash(floor(in.position.xy)));
-        color = mix(color, glintColor * 1.25, twinkle * exp(-depth / 8.0));
+    if (seed > 0.992) {
+        float twinkle = pow(saturate(sin(u.time * (0.6 + seed * 1.8) + seed * 90.0)), 28.0);
+        color = mix(color, float3(1.0), twinkle * exp(-depth / 7.0));
     }
 
     color *= u.light.rgb;

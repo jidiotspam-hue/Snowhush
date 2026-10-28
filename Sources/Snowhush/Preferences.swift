@@ -1,7 +1,13 @@
 import AppKit
 
 enum Snowfall: Int, CaseIterable {
-    case off, light, steady, heavy, blizzard, whiteout, variable
+    case off = 0
+    case light = 1
+    case steady = 2
+    case heavy = 3
+    case variable = 4
+    case blizzard = 5
+    case whiteout = 6
 
     var title: String {
         switch self {
@@ -9,9 +15,9 @@ enum Snowfall: Int, CaseIterable {
         case .light: "Light"
         case .steady: "Steady"
         case .heavy: "Heavy"
+        case .variable: "Variable"
         case .blizzard: "Blizzard"
         case .whiteout: "Whiteout"
-        case .variable: "Variable"
         }
     }
 
@@ -21,9 +27,9 @@ enum Snowfall: Int, CaseIterable {
         case .light: 150
         case .steady: 380
         case .heavy: 800
+        case .variable: 380
         case .blizzard: 2400
         case .whiteout: 6000
-        case .variable: 380
         }
     }
 }

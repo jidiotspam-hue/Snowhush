@@ -85,13 +85,15 @@ final class Renderer: NSObject, MTKViewDelegate {
         lastTime = 0
     }
 
+    func wake() {
+        idleFrames = 0
+    }
+
     func mtkView(_ view: MTKView, drawableSizeWillChange size: CGSize) {}
 
-    /// Sizes drawable with Retina backing scale factor for razor-sharp rendering on high-DPI displays.
-    static func fitDrawable(of view: MTKView, screen: NSScreen? = nil) {
-        let factor = screen?.backingScaleFactor ?? NSScreen.main?.backingScaleFactor ?? 2.0
-        let size = view.bounds.size
-        view.drawableSize = CGSize(width: size.width * factor, height: size.height * factor)
+    /// Snow is soft enough that one pixel per point is indistinguishable from Retina, at a quarter of the fill and memory.
+    static func fitDrawable(of view: MTKView) {
+        view.drawableSize = view.bounds.size
     }
 
     func draw(in view: MTKView) {
@@ -109,7 +111,7 @@ final class Renderer: NSObject, MTKViewDelegate {
         let calm = budget == .saver && interactiveFrameRate % 24 == 0 ? 24 : 30
         let frameRate = switch simulation.pace {
         case .calm: calm
-        case .lively: budget == .full ? fastest : min(60, fastest)
+        case .lively: min(60, fastest)
         case .interactive: fastest
         }
         if view.preferredFramesPerSecond != frameRate { view.preferredFramesPerSecond = frameRate }
@@ -149,6 +151,21 @@ final class Renderer: NSObject, MTKViewDelegate {
             capacity: heightCapacity
         )
 
+        var groundPiles: [PileLayer] = []
+        var windowPiles: [PileLayer] = []
+        var dockPiles: [PileLayer] = []
+        groundPiles.reserveCapacity(piles.count)
+        windowPiles.reserveCapacity(piles.count)
+        dockPiles.reserveCapacity(2)
+
+        for pile in piles {
+            switch pile.kind {
+            case .ground: groundPiles.append(pile)
+            case .window: windowPiles.append(pile)
+            case .dock: dockPiles.append(pile)
+            }
+        }
+
         var uniforms = Uniforms(
             viewSize: SIMD2(simulation.width, simulation.height),
             scale: scale,
@@ -160,7 +177,7 @@ final class Renderer: NSObject, MTKViewDelegate {
         let uniformsLength = MemoryLayout<Uniforms>.stride
 
         if behindWindows {
-            drawPiles(piles.filter { !$0.isDock && !$0.isWindow }, with: encoder, uniforms: uniforms, heights: heightBuffer)
+            drawPiles(groundPiles, with: encoder, uniforms: uniforms, heights: heightBuffer)
             if sprites > 0 {
                 encoder.setRenderPipelineState(spritePipeline)
                 encoder.setVertexBuffer(spriteBuffer, offset: 0, index: 0)
@@ -168,10 +185,10 @@ final class Renderer: NSObject, MTKViewDelegate {
                 encoder.drawPrimitives(type: .point, vertexStart: 0, vertexCount: sprites)
             }
             encoder.endEncoding()
-            encodeDock(piles.filter(\.isDock), into: commandBuffer, uniforms: uniforms, heights: heightBuffer)
-            encodeWindowOverlay(piles.filter(\.isWindow), into: commandBuffer, uniforms: uniforms, heights: heightBuffer)
+            encodeDock(dockPiles, into: commandBuffer, uniforms: uniforms, heights: heightBuffer)
+            encodeWindowOverlay(windowPiles, into: commandBuffer, uniforms: uniforms, heights: heightBuffer)
         } else {
-            drawPiles(piles.filter { !$0.isDock }, with: encoder, uniforms: uniforms, heights: heightBuffer)
+            drawPiles(groundPiles + windowPiles, with: encoder, uniforms: uniforms, heights: heightBuffer)
             if sprites > 0 {
                 encoder.setRenderPipelineState(spritePipeline)
                 encoder.setVertexBuffer(spriteBuffer, offset: 0, index: 0)
@@ -179,10 +196,8 @@ final class Renderer: NSObject, MTKViewDelegate {
                 encoder.drawPrimitives(type: .point, vertexStart: 0, vertexCount: sprites)
             }
             encoder.endEncoding()
-            encodeDock(piles.filter(\.isDock), into: commandBuffer, uniforms: uniforms, heights: heightBuffer)
-            if windowOverlayDrawn {
-                encodeWindowOverlay([], into: commandBuffer, uniforms: uniforms, heights: heightBuffer)
-            }
+            encodeDock(dockPiles, into: commandBuffer, uniforms: uniforms, heights: heightBuffer)
+            encodeWindowOverlay([], into: commandBuffer, uniforms: uniforms, heights: heightBuffer)
         }
     }
 
@@ -200,17 +215,21 @@ final class Renderer: NSObject, MTKViewDelegate {
         dockDrawn = !piles.isEmpty
     }
 
-    /// Draws the window snow into the foreground overlay window, and clears it once after the snow is gone.
+    /// Draws the window snow into the foreground overlay window, and orders it out when the snow is gone.
     private func encodeWindowOverlay(_ piles: [PileLayer], into commandBuffer: MTLCommandBuffer, uniforms: Uniforms, heights: MTLBuffer) {
-        guard let windowOverlay, !piles.isEmpty || windowOverlayDrawn else { return }
-        guard let frame = windowOverlay.nextFrame(),
-              let encoder = commandBuffer.makeRenderCommandEncoder(descriptor: frame.pass) else { return }
+        guard let windowOverlay else { return }
         if !piles.isEmpty {
+            guard let frame = windowOverlay.nextFrame(),
+                  let encoder = commandBuffer.makeRenderCommandEncoder(descriptor: frame.pass) else { return }
             drawPiles(piles, with: encoder, uniforms: uniforms, heights: heights)
+            encoder.endEncoding()
+            commandBuffer.present(frame.drawable)
+            windowOverlay.show()
+            windowOverlayDrawn = true
+        } else if windowOverlayDrawn {
+            windowOverlay.hide()
+            windowOverlayDrawn = false
         }
-        encoder.endEncoding()
-        commandBuffer.present(frame.drawable)
-        windowOverlayDrawn = !piles.isEmpty
     }
 
     private func drawPiles(_ piles: [PileLayer], with encoder: MTLRenderCommandEncoder, uniforms: Uniforms, heights: MTLBuffer) {
@@ -235,11 +254,11 @@ final class Renderer: NSObject, MTKViewDelegate {
 
     private func reserve(sprites: Int, columns: Int) {
         if sprites > spriteCapacity || spriteBuffers.isEmpty {
-            spriteCapacity = max(4096, sprites * 3 / 2)
+            spriteCapacity = max(1024, sprites * 3 / 2)
             spriteBuffers = makeBuffers(length: spriteCapacity * MemoryLayout<Sprite>.stride)
         }
         if columns > heightCapacity || heightBuffers.isEmpty {
-            heightCapacity = max(1024, columns * 3 / 2)
+            heightCapacity = max(256, columns)
             heightBuffers = makeBuffers(length: heightCapacity * MemoryLayout<Float>.stride)
         }
     }

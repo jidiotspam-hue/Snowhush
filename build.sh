@@ -16,7 +16,8 @@ ditto "$products/Sparkle.framework" "$app/Contents/Frameworks/Sparkle.framework"
 cp Resources/Info.plist "$app/Contents/"
 cp Resources/AppIcon.icns "$app/Contents/Resources/"
 
-xattr -rc "$app" || true
+xattr -d -r com.apple.FinderInfo "$app" 2>/dev/null || true
+xattr -cr "$app" 2>/dev/null || true
 
 if [[ -n "${IDENTITY:-}" ]]; then
     # Sparkle's helpers are signed inside out, each with the hardened runtime, as notarization requires.

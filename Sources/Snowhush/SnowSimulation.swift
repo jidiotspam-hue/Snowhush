@@ -26,14 +26,19 @@ struct ScatterPiece {
 }
 
 struct PileLayer {
+    enum Kind {
+        case ground
+        case window
+        case dock
+    }
+
     var offset: Int
     var count: Int
     var origin: SIMD2<Float>
     var top: Float
     var bottom: Float
     var occluders: [SIMD4<Float>]
-    var isDock: Bool
-    var isWindow: Bool
+    var kind: Kind
 }
 
 private struct Flake {
@@ -307,6 +312,7 @@ final class SnowSimulation {
         var offset = 0
         for layer in layers where layer.top > 0.05 && offset + 2 * layer.count <= capacity {
             layer.writeSmoothed(into: buffer + offset)
+            let kind: PileLayer.Kind = layer === ground ? .ground : (layer.isDock ? .dock : .window)
             result.append(PileLayer(
                 offset: offset,
                 count: layer.count,
@@ -314,8 +320,7 @@ final class SnowSimulation {
                 top: layer.top,
                 bottom: -layer.bedDepth,
                 occluders: layer.occluders,
-                isDock: layer.isDock,
-                isWindow: layer !== ground && !layer.isDock
+                kind: kind
             ))
             offset += 2 * layer.count
         }

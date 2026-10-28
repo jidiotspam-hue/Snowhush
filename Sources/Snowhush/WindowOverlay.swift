@@ -1,18 +1,17 @@
 import AppKit
 import QuartzCore
 
-/// The snow lying on window ledges, drawn in a full-screen overlay window sitting at status bar level (in front of windows).
+/// The snow lying on window ledges, drawn in an overlay window sitting at status bar level (in front of windows).
 /// When "Behind Windows" is active, falling flakes and ground snow render behind open windows on the desktop level,
 /// while this overlay renders snow accumulating on active window headers and ledges in front of windows.
+/// The window is kept ordered out until window snow actually exists under Behind Windows, avoiding compositing overhead.
 final class WindowOverlay {
     let window: OverlayWindow
     private let layer = CAMetalLayer()
     private var screenFrame: CGRect
-    private var scaleFactor: CGFloat
 
     init(screen: NSScreen, device: MTLDevice) {
         screenFrame = screen.frame
-        scaleFactor = screen.backingScaleFactor
         window = OverlayWindow(screen: screen, level: .statusBar)
         layer.device = device
         layer.pixelFormat = .bgra8Unorm
@@ -26,12 +25,24 @@ final class WindowOverlay {
         view.autoresizingMask = [.width, .height]
         window.contentView = view
         place()
-        window.orderFrontRegardless()
+        // Kept ordered out until needed
+        window.orderOut(nil)
+    }
+
+    func show() {
+        if !window.isVisible {
+            window.orderFrontRegardless()
+        }
+    }
+
+    func hide() {
+        if window.isVisible {
+            window.orderOut(nil)
+        }
     }
 
     func fit(to screen: NSScreen) {
         screenFrame = screen.frame
-        scaleFactor = screen.backingScaleFactor
         place()
     }
 
@@ -53,7 +64,7 @@ final class WindowOverlay {
 
     private func place() {
         window.setFrame(screenFrame, display: false)
-        layer.contentsScale = scaleFactor
-        layer.drawableSize = CGSize(width: screenFrame.width * scaleFactor, height: screenFrame.height * scaleFactor)
+        // One pixel per point, matching the main overlay and DockOverlay.
+        layer.drawableSize = screenFrame.size
     }
 }
