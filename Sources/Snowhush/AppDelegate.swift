@@ -159,7 +159,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, SPUSta
         meltItem.state = thaws ? .on : .off
         meltItem.isEnabled = accumulates
         snowOnWindowsItem.state = snowOnWindows ? .on : .off
-        snowOnWindowsItem.isEnabled = !behindWindows
+        snowOnWindowsItem.isEnabled = true
         clearItem.isEnabled = screens.contains { $0.simulation.hasSnow || $0.simulation.spriteCount > 0 }
         behindWindowsItem.state = behindWindows ? .on : .off
         screenshotsItem.state = Preferences.showInScreenshots ? .on : .off
@@ -201,16 +201,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, SPUSta
         behindWindows.toggle()
         Preferences.behindWindows = behindWindows
         for snow in screens {
-            snow.window.behindWindows = behindWindows
-            if behindWindows { snow.dropWindowSnow() }
+            snow.setBehindWindows(behindWindows)
         }
     }
 
     @objc private func toggleScreenshots() {
         Preferences.showInScreenshots.toggle()
         for snow in screens {
-            snow.window.showsInScreenshots = Preferences.showInScreenshots
-            snow.dock.window.showsInScreenshots = Preferences.showInScreenshots
+            snow.updateScreenshots(Preferences.showInScreenshots)
         }
     }
 

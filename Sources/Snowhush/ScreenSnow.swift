@@ -6,6 +6,7 @@ final class ScreenSnow {
     let displayID: CGDirectDisplayID
     let window: OverlayWindow
     let dock: DockOverlay
+    let windowOverlay: WindowOverlay
     let simulation: SnowSimulation
     private let view: MTKView
     private let renderer: Renderer
@@ -39,14 +40,18 @@ final class ScreenSnow {
         dock = DockOverlay(screen: screen, device: device)
         dock.window.showsInScreenshots = Preferences.showInScreenshots
         renderer.dockOverlay = dock
-        view = Self.makeView(device: device, size: screen.frame.size)
+        windowOverlay = WindowOverlay(screen: screen, device: device)
+        windowOverlay.window.showsInScreenshots = Preferences.showInScreenshots
+        renderer.windowOverlay = windowOverlay
+        renderer.behindWindows = Preferences.behindWindows
+        view = Self.makeView(device: device, screen: screen)
 
         renderer.cursorLocation = { [unowned window] in
             let mouse = NSEvent.mouseLocation
             return SIMD2(Float(mouse.x - window.frame.minX), Float(mouse.y - window.frame.minY))
         }
         renderer.windowSurfaces = { [unowned self] now in
-            snowOnWindows() && !window.behindWindows ? tracker.poll(now: now, eager: NSEvent.pressedMouseButtons != 0) : nil
+            snowOnWindows() ? tracker.poll(now: now, eager: NSEvent.pressedMouseButtons != 0) : nil
         }
         renderer.sceneLight = { [unowned self] now in
             light.update(screen: self.screen, now: now)
@@ -63,7 +68,8 @@ final class ScreenSnow {
         self.screen = screen
         window.setFrame(screen.frame, display: true)
         dock.fit(to: screen)
-        Renderer.fitDrawable(of: view)
+        windowOverlay.fit(to: screen)
+        Renderer.fitDrawable(of: view, screen: screen)
         simulation.resize(width: Float(screen.frame.width), height: Float(screen.frame.height))
         light.invalidate()
         renderer.interactiveFrameRate = Self.interactiveFrameRate(of: screen)
@@ -77,6 +83,17 @@ final class ScreenSnow {
     func apply(_ budget: PowerBudget) {
         renderer.budget = budget
         simulation.density = budget == .saver ? 0.75 : 1
+    }
+
+    func setBehindWindows(_ behind: Bool) {
+        window.behindWindows = behind
+        renderer.behindWindows = behind
+    }
+
+    func updateScreenshots(_ show: Bool) {
+        window.showsInScreenshots = show
+        dock.window.showsInScreenshots = show
+        windowOverlay.window.showsInScreenshots = show
     }
 
     func setActive(_ active: Bool) {
@@ -105,6 +122,7 @@ final class ScreenSnow {
         view.delegate = nil
         window.orderOut(nil)
         dock.close()
+        windowOverlay.close()
     }
 
     /// Window bounds come in global coordinates with the origin at the top left of the primary display.
@@ -121,8 +139,8 @@ final class ScreenSnow {
         )
     }
 
-    private static func makeView(device: MTLDevice, size: CGSize) -> MTKView {
-        let view = MTKView(frame: CGRect(origin: .zero, size: size), device: device)
+    private static func makeView(device: MTLDevice, screen: NSScreen) -> MTKView {
+        let view = MTKView(frame: CGRect(origin: .zero, size: screen.frame.size), device: device)
         view.wantsLayer = true
         view.layer?.isOpaque = false
         view.colorPixelFormat = .bgra8Unorm
@@ -131,7 +149,7 @@ final class ScreenSnow {
         view.preferredFramesPerSecond = 30
         view.autoresizingMask = [.width, .height]
         view.autoResizeDrawable = false
-        Renderer.fitDrawable(of: view)
+        Renderer.fitDrawable(of: view, screen: screen)
         return view
     }
 }

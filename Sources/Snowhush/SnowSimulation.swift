@@ -33,6 +33,7 @@ struct PileLayer {
     var bottom: Float
     var occluders: [SIMD4<Float>]
     var isDock: Bool
+    var isWindow: Bool
 }
 
 private struct Flake {
@@ -313,7 +314,8 @@ final class SnowSimulation {
                 top: layer.top,
                 bottom: -layer.bedDepth,
                 occluders: layer.occluders,
-                isDock: layer.isDock
+                isDock: layer.isDock,
+                isWindow: layer !== ground && !layer.isDock
             ))
             offset += 2 * layer.count
         }
